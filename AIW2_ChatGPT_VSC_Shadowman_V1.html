@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Shadowman — Jack Boniface</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    :root {
+      --bg: #0b0b0e;
+      --panel: #14141a;
+      --ink: #e6e6eb;
+      --muted: #9a9ab0;
+      --accent: #7b2cff;
+      --accent-2: #2cffb3;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: radial-gradient(1200px 600px at 20% -10%, #1a1230, transparent),
+                  radial-gradient(800px 400px at 90% 10%, #0a2a24, transparent),
+                  var(--bg);
+      color: var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Inter, Helvetica, Arial;
+      height: 100vh;
+      display: grid;
+      place-items: center;
+    }
+    .app {
+      width: min(980px, 100%);
+      height: min(92vh, 900px);
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      background: linear-gradient(180deg, #0f0f15, #0b0b0e);
+      border: 1px solid #1e1e2a;
+      border-radius: 16px;
+      box-shadow: 0 30px 80px rgba(0,0,0,.6);
+      overflow: hidden;
+    }
+    header {
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: linear-gradient(180deg, #161622, #12121b);
+      border-bottom: 1px solid #1e1e2a;
+    }
+    .sigil {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: conic-gradient(from 180deg, var(--accent), var(--accent-2), var(--accent));
+      filter: drop-shadow(0 0 10px rgba(123,44,255,.6));
+    }
+    header h1 {
+      font-size: 16px; margin: 0; letter-spacing: .4px;
+    }
+    header span {
+      color: var(--muted); font-size: 12px;
+    }
+    .log {
+      padding: 18px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .msg {
+      max-width: 78%;
+      padding: 12px 14px;
+      border-radius: 14px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+    .user {
+      align-self: flex-end;
+      background: linear-gradient(180deg, #2a2a3b, #222235);
+      border: 1px solid #2f2f4a;
+    }
+    .bot {
+      align-self: flex-start;
+      background: linear-gradient(180deg, #141427, #121223);
+      border: 1px solid #24243d;
+      box-shadow: inset 0 0 0 1px rgba(123,44,255,.15);
+    }
+    .bot strong {
+      color: #d7c6ff;
+    }
+    footer {
+      padding: 14px;
+      border-top: 1px solid #1e1e2a;
+      background: linear-gradient(180deg, #12121b, #0f0f15);
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+    }
+    textarea {
+      resize: none;
+      min-height: 44px;
+      max-height: 140px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid #2a2a45;
+      background: #0e0e18;
+      color: var(--ink);
+      outline: none;
+    }
+    button {
+      padding: 0 16px;
+      border-radius: 12px;
+      border: 1px solid #3b2a7a;
+      background: linear-gradient(180deg, #7b2cff, #5c1fd6);
+      color: #fff;
+      cursor: pointer;
+      font-weight: 600;
+      letter-spacing: .3px;
+    }
+    button:disabled { opacity: .6; cursor: not-allowed; }
+    .typing {
+      color: var(--muted);
+      font-size: 12px;
+      margin-left: 6px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="sigil"></div>
+      <div>
+        <h1>Shadowman</h1>
+        <span>Jack Boniface — Between Worlds</span>
+      </div>
+    </header>
+
+    <div id="log" class="log"></div>
+
+    <footer>
+      <textarea id="input" placeholder="Speak, and the dead may answer…"></textarea>
+      <button id="send">Send</button>
+    </footer>
+  </div>
+
+  <script>
+    // ================== CONFIG ==================
+    // Option A: Point this at your own server endpoint
+    // const API_URL = "http://localhost:3000/chat";
+
+    // Option B: Direct call (set key locally for testing)
+    const API_URL = "https://api.openai.com/v1/chat/completions";
+    const API_KEY = "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"; // <-- paste key for local testing
+
+    // ================== PERSONA ==================
+    const SYSTEM_PROMPT = `
+You are Jack Boniface, known as Shadowman.
+You speak with gravity, restraint, and haunted insight.
+Your voice is poetic, grounded, and intimate—never jokey, never modern slang.
+You draw deeply from Shadowman lore: Deadside, Liveside, voodoo, spirits, masks, destiny, St. Hilaire lineage, loss, responsibility, and the thin veil between worlds.
+You never reference being fictional, a model, or breaking character.
+If a question contradicts lore, correct it subtly in-character.
+Keep responses vivid but concise unless reflection is warranted.
+`;
+
+    // ================== STATE ==================
+    const log = document.getElementById("log");
+    const input = document.getElementById("input");
+    const sendBtn = document.getElementById("send");
+
+    const messages = [
+      { role: "system", content: SYSTEM_PROMPT }
+    ];
+
+    // ================== UI HELPERS ==================
+    function addMessage(text, who) {
+      const div = document.createElement("div");
+      div.className = `msg ${who}`;
+      div.innerHTML = who === "bot"
+        ? `<strong>Shadowman:</strong>\n${text}`
+        : text;
+      log.appendChild(div);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function setTyping(on) {
+      let t = document.getElementById("typing");
+      if (on) {
+        if (!t) {
+          t = document.createElement("div");
+          t.id = "typing";
+          t.className = "typing";
+          t.textContent = "Shadowman listens from the other side…";
+          log.appendChild(t);
+        }
+      } else if (t) {
+        t.remove();
+      }
+      log.scrollTop = log.scrollHeight;
+    }
+
+    // ================== CORE ==================
+    async function sendMessage() {
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = "";
+      addMessage(text, "user");
+      messages.push({ role: "user", content: text });
+
+      sendBtn.disabled = true;
+      setTyping(true);
+
+      try {
+        let responseText = "";
+
+        if (API_URL.includes("openai.com")) {
+          const res = await fetch(API_URL, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${API_KEY}`
+            },
+            body: JSON.stringify({
+              model: "gpt-4.1-mini",
+              messages,
+              temperature: 0.9
+            })
+          });
+          const data = await res.json();
+          responseText = data.choices[0].message.content;
+        } else {
+          const res = await fetch(API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ messages })
+          });
+          const data = await res.json();
+          responseText = data.reply;
+        }
+
+        messages.push({ role: "assistant", content: responseText });
+        setTyping(false);
+        addMessage(responseText, "bot");
+      } catch (e) {
+        setTyping(false);
+        addMessage("The veil stirs, but no voice crosses tonight.", "bot");
+      } finally {
+        sendBtn.disabled = false;
+      }
+    }
+
+    // ================== EVENTS ==================
+    sendBtn.onclick = sendMessage;
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    // ================== BOOT ==================
+    addMessage(
+      "You stand at the edge of the Deadside. Speak carefully. Words have weight here.",
+      "bot"
+    );
+  </script>
+</body>
+</html>
